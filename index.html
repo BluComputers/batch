@@ -44,7 +44,7 @@
         .field-box { border: 1.5px solid #111111; padding: 12px; border-radius: 4px; background: #ffffff; }
         .field-box label { display: block; font-size: 11px; text-transform: uppercase; color: #323130; font-weight: 800; margin-bottom: 6px; letter-spacing: 0.3px; }
         .field-box .value { font-size: 17px; font-weight: 700; color: #000000; line-height: 1.3; }
-        .tech-line { border-bottom: 1.5px dashed #a19f9d; width: 90%; display: inline-block; margin-top: 8px; }
+        .tech-line { border-bottom: 1.5px dashed #a19f9d; width: 90%; display: inline-block; margin-top: 8px; height: 18px; }
         
         .section-block { margin-top: 20px; border: 1.5px solid #111111; padding: 15px; border-radius: 4px; background: #ffffff; flex-grow: 0; }
         .section-block.expandable { flex-grow: 1; min-height: 150px; }
@@ -95,8 +95,6 @@
 
     <script>
         const RAW_CAL_URL = 'https://export.calendar.online/ics/0/f7a7fdb00caf9bd5fb7b/entirecalendar.ics?past_months=3&future_months=36';
-        
-        // Premium GitHub-optimized CORS proxy configuration
         const LIVE_ENDPOINT = 'https://cors-anywhere.herokuapp.com/' + RAW_CAL_URL;
 
         function isolateVehicleReg(searchString) {
@@ -106,6 +104,38 @@
             return targetMatch ? targetMatch[0].toUpperCase() : null;
         }
 
+        /**
+         * Safely attempts to pull the name string from standard organizer or attendee properties
+         */
+        function extractTechnicianName(eventNode, activeEvent) {
+            try {
+                // Check strategy 1: Read the high-level event organizer property definition
+                if (activeEvent.organizer) {
+                    let orgValue = activeEvent.organizer;
+                    // Strip typical mailto tracking parameters if present
+                    if (typeof orgValue === 'string') {
+                        return orgValue.replace(/mailto:/i, '').split('@')[0].trim();
+                    }
+                }
+
+                // Check strategy 2: Query raw subcomponent properties directly for common custom name mapping tags
+                const rawOrganizerProp = eventNode.getFirstProperty('organizer');
+                if (rawOrganizerProp) {
+                    const cnParameter = rawOrganizerProp.getParameter('cn');
+                    if (cnParameter) return cnParameter;
+                }
+
+                const rawAttendeeProp = eventNode.getFirstProperty('attendee');
+                if (rawAttendeeProp) {
+                    const cnParam = rawAttendeeProp.getParameter('cn');
+                    if (cnParam) return cnParam;
+                }
+            } catch (e) {
+                console.warn("Non-breaking layout mapping skip during technician parse:", e);
+            }
+            return null;
+        }
+
         async function syncWithCalendarOnline() {
             const container = document.getElementById('cards-container');
             const dateIndicator = document.getElementById('date-indicator');
@@ -113,7 +143,6 @@
             container.innerHTML = '<div class="state-notice">Syncing with Live Calendar Data Stream...</div>';
 
             try {
-                // We pass custom headers to signal a standard origin fetch request pattern
                 const networkResponse = await fetch(LIVE_ENDPOINT, {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
@@ -160,6 +189,9 @@
                         const eventDescriptionNotes = activeEvent.description || "No supplemental instruction details documented within the calendar interface.";
                         const discoveredPlateNumber = isolateVehicleReg(eventSummaryTitle) || isolateVehicleReg(eventDescriptionNotes);
                         
+                        // Parse mapped technician identity data strings out of parameters
+                        const technicianName = extractTechnicianName(eventNode, activeEvent);
+
                         let scrubbedCleanTitleText = eventSummaryTitle;
                         if (discoveredPlateNumber) {
                             scrubbedCleanTitleText = eventSummaryTitle.replace(discoveredPlateNumber, '').replace(/[\(\)\[\]\-\:\r\n]/g, '').trim();
@@ -187,7 +219,11 @@
                                     </div>
                                     <div class="field-box">
                                         <label>Allocated Technician</label>
-                                        <div class="value"><span class="tech-line"></span></div>
+                                        <div class="value">
+                                            ${technicianName ? 
+                                                `<span style="color:#000; font-weight:700; text-transform:uppercase;">${technicianName}</span>` : 
+                                                `<span class="tech-line"></span>`}
+                                        </div>
                                     </div>
                                 </div>
 
